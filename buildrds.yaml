@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Create a custom VPC and, subnets, security group, and an RDS instance
+Description: Create a custom VPC and , subnets, security group, and an RDS instance
 
 Parameters:
   DBName:
