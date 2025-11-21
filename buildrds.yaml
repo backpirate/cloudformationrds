@@ -92,7 +92,7 @@ Resources:
     Properties:
       DBName: !Ref DBName
       MasterUsername: !Ref DBUser
-      MasterUserPassword: "MyHardcodedPassword1344!"
+      MasterUserPassword: "MyHardcodedPassword13!"
       DBInstanceClass: !Ref DBInstanceClass
       AllocatedStorage: !Ref DBAllocatedStorage
       Engine: mysql
