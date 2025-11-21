@@ -8,9 +8,6 @@ Parameters:
   DBUser:
     Type: String
     Default: admin
-  DBPassword:
-    Type: String
-    NoEcho: true
   DBInstanceClass:
     Type: String
     Default: db.t3.micro
@@ -95,7 +92,7 @@ Resources:
     Properties:
       DBName: !Ref DBName
       MasterUsername: !Ref DBUser
-      MasterUserPassword: !Ref DBPassword
+      MasterUserPassword: "MyHardcodedPassword123!"
       DBInstanceClass: !Ref DBInstanceClass
       AllocatedStorage: !Ref DBAllocatedStorage
       Engine: mysql
