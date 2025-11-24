@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Create a custom VPC and , subnets, security group, and an RDS instance
+Description: Create a private VPC with private subnets, locked-down security group, and a private RDS instance (no public access).
 
 Parameters:
   DBName:
@@ -8,21 +8,34 @@ Parameters:
   DBUser:
     Type: String
     Default: admin
+ 
   DBInstanceClass:
     Type: String
     Default: db.t3.micro
+    AllowedValues:
+      - db.t3.micro
+      - db.t3.small
+      - db.t3.medium
+      - db.t4g.micro
+      - db.t4g.small
+      - db.t4g.medium
   DBAllocatedStorage:
     Type: Number
     Default: 30
+    MinValue: 20
   VpcCidr:
     Type: String
     Default: 10.0.0.0/16
-  PublicSubnetCidr:
+  PrivateSubnet1Cidr:
     Type: String
     Default: 10.0.1.0/24
-  PrivateSubnetCidr:
+  PrivateSubnet2Cidr:
     Type: String
     Default: 10.0.2.0/24
+  AllowedIngressCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: CIDR allowed to connect to RDS (e.g., app servers/bastion in private IP space).
 
 Resources:
   ### VPC ###
@@ -34,59 +47,85 @@ Resources:
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: MyCustomVPC
+          Value: MyPrivateVPC
 
-  ### Subnets ###
-  PublicSubnet:
+  ### Private Subnets (two AZs required by RDS) ###
+  PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref MyVPC
-      CidrBlock: !Ref PublicSubnetCidr
-      MapPublicIpOnLaunch: true
+      CidrBlock: !Ref PrivateSubnet1Cidr
+      MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [0, !GetAZs '']
       Tags:
         - Key: Name
-          Value: PublicSubnet
+          Value: PrivateSubnet-1
 
-  PrivateSubnet:
+  PrivateSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref MyVPC
-      CidrBlock: !Ref PrivateSubnetCidr
+      CidrBlock: !Ref PrivateSubnet2Cidr
       MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [1, !GetAZs '']
       Tags:
         - Key: Name
-          Value: PrivateSubnet
+          Value: PrivateSubnet-2
 
-  ### Security Group ###
+  ### Private Route Table (no Internet Gateway) ###
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTable
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  ### Security Group for RDS (locked down) ###
   RDSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow MySQL access
+      GroupDescription: Allow MySQL access from private CIDR only
       VpcId: !Ref MyVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 3306
           ToPort: 3306
-          CidrIp: 0.0.0.0/0  # For demo; restrict in production
+          CidrIp: !Ref AllowedIngressCidr  # Restrict to private range / app servers
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 0.0.0.0/0  # Outbound allowed; does not make it public
       Tags:
         - Key: Name
           Value: RDS-SG
 
-  ### DB Subnet Group ###
+  ### DB Subnet Group (private subnets only) ###
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupDescription: Subnet group for RDS
+      DBSubnetGroupDescription: Subnet group for private RDS
       SubnetIds:
-        - !Ref PublicSubnet
-        - !Ref PrivateSubnet
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
       Tags:
         - Key: Name
-          Value: RDSSubnetGroup
+          Value: RDSSubnetGroupPrivate
 
-  ### RDS Instance ###
+  ### RDS Instance (private, encrypted) ###
   MyDBInstance:
     Type: AWS::RDS::DBInstance
     Properties:
@@ -96,13 +135,27 @@ Resources:
       DBInstanceClass: !Ref DBInstanceClass
       AllocatedStorage: !Ref DBAllocatedStorage
       Engine: mysql
+      EngineVersion: '8.0'              # Adjust as needed
+      StorageEncrypted: true
       VPCSecurityGroups:
         - !Ref RDSSecurityGroup
       DBSubnetGroupName: !Ref DBSubnetGroup
       PubliclyAccessible: false
+      MultiAZ: false                    # Set to true if you need HA
+      BackupRetentionPeriod: 7          # Adjust as needed
+      DeletionProtection: false          # Prevent accidental deletes
+      AutoMinorVersionUpgrade: true
+      Tags:
+        - Key: Name
+          Value: MyPrivateMySQL
 
 Outputs:
   VPCId:
     Value: !Ref MyVPC
+  PrivateSubnet1Id:
+    Value: !Ref PrivateSubnet1
+  PrivateSubnet2Id:
+    Value: !Ref PrivateSubnet2
   RDSEndpoint:
     Value: !GetAtt MyDBInstance.Endpoint.Address
+  RDSPort:
