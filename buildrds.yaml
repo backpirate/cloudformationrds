@@ -1,6 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Private VPC with private subnets, private RDS, private EC2 (SSM), and private EKS cluster with two nodes.
+  Private VPC with private subnets, private RDS, private EC2 (SSM), advanced private EKS cluster with two nodes,
+  and VPC endpoints for S3, CloudWatch Logs, CloudWatch Metrics, ECR, STS, and SSM. All values hardcoded.
 
 Resources:
   ### VPC ###
@@ -59,6 +60,36 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable
 
   ### Security Groups ###
+  # EKS cluster SG (EKS will manage rules on this SG)
+  EKSClusterSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EKS Cluster SG
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress: []
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: EKS-Cluster-SG
+
+  # Node SG (attached via Launch Template)
+  EKSNodeSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EKS Node SG
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          SourceSecurityGroupId: !Ref EKSClusterSG
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: EKS-Node-SG
+
   RDSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -72,6 +103,9 @@ Resources:
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: RDS-SG
 
   EC2SecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -82,6 +116,28 @@ Resources:
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: PrivateEC2-SG
+
+  VPCEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG for VPC interface endpoints
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 10.0.0.0/16
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: VPCEndpoints-SG
 
   ### RDS ###
   DBSubnetGroup:
@@ -91,6 +147,9 @@ Resources:
       SubnetIds:
         - !Ref PrivateSubnet1
         - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: RDSSubnetGroupPrivate
 
   MyDBInstance:
     Type: AWS::RDS::DBInstance
@@ -107,8 +166,15 @@ Resources:
         - !Ref RDSSecurityGroup
       DBSubnetGroupName: !Ref DBSubnetGroup
       PubliclyAccessible: false
+      MultiAZ: false
+      BackupRetentionPeriod: 7
+      DeletionProtection: false
+      AutoMinorVersionUpgrade: true
+      Tags:
+        - Key: Name
+          Value: MyPrivateMySQL
 
-  ### EC2 for SSM ###
+  ### EC2 with SSM ###
   SSMInstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -121,6 +187,9 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: SSMInstanceRole
 
   SSMInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -131,7 +200,7 @@ Resources:
   PrivateEC2Instance:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: ami-0c02fb55956c7d316
+      ImageId: ami-0c02fb55956c7d316  # Replace with a region-valid AMI if needed
       InstanceType: t3.micro
       SubnetId: !Ref PrivateSubnet1
       IamInstanceProfile: !Ref SSMInstanceProfile
@@ -140,8 +209,18 @@ Resources:
       Tags:
         - Key: Name
           Value: PrivateEC2
+      DisableApiTermination: false
+      EnclaveOptions:
+        Enabled: false
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -euxo pipefail
+          echo "Instance started at $(date)" > /var/log/userdata.log
+          # No package installs (no internet). Use SSM Session Manager for access.
+          echo "Done" >> /var/log/userdata.log
 
-  ### EKS Cluster ###
+  ### EKS Cluster & Node Group ###
   EKSClusterRole:
     Type: AWS::IAM::Role
     Properties:
@@ -154,23 +233,10 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+      Tags:
+        - Key: Name
+          Value: EKSClusterRole
 
-  MyEKSCluster:
-    Type: AWS::EKS::Cluster
-    Properties:
-      Name: MyPrivateEKS
-      RoleArn: !GetAtt EKSClusterRole.Arn
-      ResourcesVpcConfig:
-        SubnetIds:
-          - !Ref PrivateSubnet1
-          - !Ref PrivateSubnet2
-        SecurityGroupIds:
-          - !Ref EC2SecurityGroup
-        EndpointPublicAccess: false
-        EndpointPrivateAccess: true
-      Version: "1.29"
-
-  ### EKS Node Group ###
   EKSNodeRole:
     Type: AWS::IAM::Role
     Properties:
@@ -185,6 +251,73 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
         - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
         - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+      Tags:
+        - Key: Name
+          Value: EKSNodeRole
+
+  MyEKSCluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: MyAdvancedPrivateEKS
+      RoleArn: !GetAtt EKSClusterRole.Arn
+      ResourcesVpcConfig:
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+        SecurityGroupIds:
+          - !Ref EKSClusterSG
+        EndpointPublicAccess: false
+        EndpointPrivateAccess: true
+      Version: "1.29"
+      Tags:
+        - Key: Name
+          Value: MyAdvancedPrivateEKS
+
+  # EKS Add-ons (managed by AWS)
+  CoreDNSAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref MyEKSCluster
+      AddonName: coredns
+      ResolveConflicts: OVERWRITE
+
+  VpcCNIAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref MyEKSCluster
+      AddonName: vpc-cni
+      ResolveConflicts: OVERWRITE
+
+  KubeProxyAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref MyEKSCluster
+      AddonName: kube-proxy
+      ResolveConflicts: OVERWRITE
+
+  # Launch Template to attach the Node SG and ensure no public IPs
+  EKSNodeLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: EKSNodeLT
+      LaunchTemplateData:
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            AssociatePublicIpAddress: false
+            Groups:
+              - !Ref EKSNodeSG
+        InstanceType: t3.medium
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: 20
+              VolumeType: gp3
+              Encrypted: true
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: AdvancedPrivateEKSNode
 
   EKSNodeGroup:
     Type: AWS::EKS::Nodegroup
@@ -199,23 +332,177 @@ Resources:
         MaxSize: 2
         DesiredSize: 2
       AmiType: AL2_x86_64
-      InstanceTypes:
-        - t3.medium
       DiskSize: 20
-      RemoteAccess: # Disabled SSH
-        Ec2SshKey: ""
+      LaunchTemplate:
+        Id: !Ref EKSNodeLaunchTemplate
+        Version: !GetAtt EKSNodeLaunchTemplate.LatestVersionNumber
       Tags:
-        Name: PrivateEKSNodes
+        Name: AdvancedPrivateEKSNodes
+
+  ### VPC Endpoints ###
+  # SSM (Session Manager) endpoints for private EC2 access
+  SSMEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref MyVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: SSM-Endpoint
+
+  EC2MessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref MyVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: EC2Messages-Endpoint
+
+  SSMMessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref MyVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: SSMMessages-Endpoint
+
+  # ECR, STS, S3, CloudWatch Logs & Metrics endpoints (for private cluster/node ops)
+  ECRApiEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref MyVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.api
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref EKSClusterSG
+      Tags:
+        - Key: Name
+          Value: ECR-API-Endpoint
+
+  ECRDkrEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref MyVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.dkr
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref EKSClusterSG
+      Tags:
+        - Key: Name
+          Value: ECR-DKR-Endpoint
+
+  STSEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref MyVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.sts
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref EKSClusterSG
+      Tags:
+        - Key: Name
+          Value: STS-Endpoint
+
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref MyVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+      Tags:
+        - Key: Name
+          Value: S3-Gateway-Endpoint
+
+  CloudWatchLogsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref MyVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.logs
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+      Tags:
+        - Key: Name
+          Value: CW-Logs-Endpoint
+
+  CloudWatchMonitoringEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref MyVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.monitoring
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+      Tags:
+        - Key: Name
+          Value: CW-Monitoring-Endpoint
 
 Outputs:
   VPCId:
     Value: !Ref MyVPC
+  PrivateSubnet1Id:
+    Value: !Ref PrivateSubnet1
+  PrivateSubnet2Id:
+    Value: !Ref PrivateSubnet2
+
+  # RDS
   RDSEndpoint:
     Value: !GetAtt MyDBInstance.Endpoint.Address
   RDSPort:
     Value: !GetAtt MyDBInstance.Endpoint.Port
+
+  # EC2
   EC2InstanceId:
     Value: !Ref PrivateEC2Instance
+  EC2SSMNote:
+    Value: "Connect via AWS Systems Manager > Session Manager (no IGW/NAT required)."
+
+  # EKS
   EKSClusterName:
     Value: !Ref MyEKSCluster
   EKSNodeGroupName:
