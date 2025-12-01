@@ -200,18 +200,20 @@ Resources:
       IamInstanceProfile: !Ref SSMInstanceProfile
       SecurityGroupIds: [!Ref EC2SecurityGroup]
       Tags: [{ Key: Name, Value: PrivateEC2 }]
+           
       UserData:
         Fn::Base64:
           !Sub |
             #!/bin/bash
             set -euxo pipefail
             cat >/etc/profile.d/eks_rds.sh <<'EOF'
-            export DB_ENDPOINT="${DB_ENDPOINT}"
-            export DB_PORT="${DB_PORT}"
-            export DB_USER="admin"
-            export DB_PASS="MyHardcodedPassword13!"
-            export EKS_CLUSTER_NAME="MyAdvancedPrivateEKS"
+            export DB_ENDPOINT='${MyDBInstance.Endpoint.Address}'
+            export DB_PORT='${MyDBInstance.Endpoint.Port}'
+            export DB_USER='admin'
+            export DB_PASS='MyHardcodedPassword13!'
+            export EKS_CLUSTER_NAME='MyAdvancedPrivateEKS'
             EOF
+
 
   ### EKS Cluster & Node Group ###
   EKSClusterRole:
@@ -225,7 +227,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
-    - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
       Tags: [{ Key: Name, Value: EKSClusterRole }]
 
   EKSNodeRole:
