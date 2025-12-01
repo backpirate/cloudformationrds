@@ -22,7 +22,9 @@ Resources:
       CidrBlock: 10.0.1.0/24
       MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [0, !GetAZs '']
-      Tags: [{ Key: Name, Value: PrivateSubnet-1 }]
+      Tags:
+      - { Key: Name, Value: PrivateSubnet-1 }
+      - { Key: kubernetes.io/role/internal-elb, Value: 1 }
 
   PrivateSubnet2:
     Type: AWS::EC2::Subnet
@@ -31,7 +33,9 @@ Resources:
       CidrBlock: 10.0.2.0/24
       MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [1, !GetAZs '']
-      Tags: [{ Key: Name, Value: PrivateSubnet-2 }]
+      Tags:
+      - { Key: Name, Value: PrivateSubnet-2 }
+      - { Key: kubernetes.io/role/internal-elb, Value: 1 }
 
   ### Route Table ###
   PrivateRouteTable:
@@ -221,6 +225,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+    - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
       Tags: [{ Key: Name, Value: EKSClusterRole }]
 
   EKSNodeRole:
