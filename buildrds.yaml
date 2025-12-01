@@ -252,7 +252,7 @@ Resources:
       RoleArn: !GetAtt EKSClusterRole.Arn
       ResourcesVpcConfig:
         SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
-        SecurityGroupIds: [!Ref EKSClusterSG]
+        SecurityGroupIds: [!Ref VPCEndpointSecurityGroup]
         EndpointPublicAccess: false
         EndpointPrivateAccess: true
       Version: "1.29"
@@ -312,7 +312,6 @@ Resources:
       Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
       ScalingConfig: { MinSize: 2, MaxSize: 2, DesiredSize: 2 }
       AmiType: AL2_x86_64
-      DiskSize: 20
       LaunchTemplate:
         Id: !Ref EKSNodeLaunchTemplate
         Version: !GetAtt EKSNodeLaunchTemplate.LatestVersionNumber
@@ -370,7 +369,7 @@ Resources:
       VpcEndpointType: Interface
       PrivateDnsEnabled: true
       SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
-      SecurityGroupIds: [!Ref EKSClusterSG]
+      SecurityGroupIds: [!Ref VPCEndpointSecurityGroup]
 
   ECRDkrEndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -380,7 +379,7 @@ Resources:
       VpcEndpointType: Interface
       PrivateDnsEnabled: true
       SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
-      SecurityGroupIds: [!Ref EKSClusterSG]
+      SecurityGroupIds: [!Ref VPCEndpointSecurityGroup]
 
   STSEndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -390,7 +389,7 @@ Resources:
       VpcEndpointType: Interface
       PrivateDnsEnabled: true
       SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
-      SecurityGroupIds: [!Ref EKSClusterSG]
+      SecurityGroupIds: [!Ref VPCEndpointSecurityGroup]
 
   S3GatewayEndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -420,7 +419,7 @@ Resources:
       SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
       SecurityGroupIds: [!Ref VPCEndpointSecurityGroup]
 
-  # 🔐 NEW: KMS endpoint (required for encrypted EBS on nodes in private VPC)
+  # ? NEW: KMS endpoint (required for encrypted EBS on nodes in private VPC)
   CloudKmsEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -430,6 +429,16 @@ Resources:
       PrivateDnsEnabled: true
       SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
       SecurityGroupIds: [!Ref VPCEndpointSecurityGroup]
+
+  EC2ApiEndpoint:
+        Type: AWS::EC2::VPCEndpoint
+        Properties:
+            VpcId: !Ref MyVPC
+            ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2
+            VpcEndpointType: Interface
+            PrivateDnsEnabled: true
+            SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+            SecurityGroupIds: [!Ref VPCEndpointSecurityGroup]
 
 Outputs:
   VPCId:
