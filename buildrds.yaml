@@ -1,48 +1,14 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Create a private VPC with private subnets, locked-down security group, and a private RDS instance (no public access).
-
-Parameters:
-  DBName:
-    Type: String
-    Default: mydb
-  DBUser:
-    Type: String
-    Default: admin
- 
-  DBInstanceClass:
-    Type: String
-    Default: db.t3.micro
-    AllowedValues:
-      - db.t3.micro
-      - db.t3.small
-      - db.t3.medium
-      - db.t4g.micro
-      - db.t4g.small
-      - db.t4g.medium
-  DBAllocatedStorage:
-    Type: Number
-    Default: 30
-    MinValue: 20
-  VpcCidr:
-    Type: String
-    Default: 10.0.0.0/16
-  PrivateSubnet1Cidr:
-    Type: String
-    Default: 10.0.1.0/24
-  PrivateSubnet2Cidr:
-    Type: String
-    Default: 10.0.2.0/24
-  AllowedIngressCidr:
-    Type: String
-    Default: 10.0.0.0/16
-    Description: CIDR allowed to connect to RDS (e.g., app servers/bastion in private IP space).
+Description: >
+  Private VPC with private subnets, locked-down security group, private RDS (no public access),
+  and a private EC2 instance reachable via SSM Session Manager (no IGW/NAT). All values hardcoded.
 
 Resources:
   ### VPC ###
   MyVPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: !Ref VpcCidr
+      CidrBlock: 10.0.0.0/16
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
@@ -54,7 +20,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref MyVPC
-      CidrBlock: !Ref PrivateSubnet1Cidr
+      CidrBlock: 10.0.1.0/24
       MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [0, !GetAZs '']
       Tags:
@@ -65,14 +31,14 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref MyVPC
-      CidrBlock: !Ref PrivateSubnet2Cidr
+      CidrBlock: 10.0.2.0/24
       MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [1, !GetAZs '']
       Tags:
         - Key: Name
           Value: PrivateSubnet-2
 
-  ### Private Route Table (no Internet Gateway) ###
+  ### Private Route Table (no Internet Gateway/NAT) ###
   PrivateRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -93,7 +59,7 @@ Resources:
       SubnetId: !Ref PrivateSubnet2
       RouteTableId: !Ref PrivateRouteTable
 
-  ### Security Group for RDS (locked down) ###
+  ### Security Group for RDS (locked down to VPC CIDR) ###
   RDSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -103,12 +69,12 @@ Resources:
         - IpProtocol: tcp
           FromPort: 3306
           ToPort: 3306
-          CidrIp: !Ref AllowedIngressCidr  # Restrict to private range / app servers
+          CidrIp: 10.0.0.0/16
       SecurityGroupEgress:
         - IpProtocol: -1
           FromPort: 0
           ToPort: 0
-          CidrIp: 0.0.0.0/0  # Outbound allowed; does not make it public
+          CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
           Value: RDS-SG
@@ -129,25 +95,156 @@ Resources:
   MyDBInstance:
     Type: AWS::RDS::DBInstance
     Properties:
-      DBName: !Ref DBName
-      MasterUsername: !Ref DBUser
+      DBName: mydb
+      MasterUsername: admin
       MasterUserPassword: "MyHardcodedPassword13!"
-      DBInstanceClass: !Ref DBInstanceClass
-      AllocatedStorage: !Ref DBAllocatedStorage
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: 30
       Engine: mysql
-      EngineVersion: '8.0'              # Adjust as needed
+      EngineVersion: '8.0'
       StorageEncrypted: true
       VPCSecurityGroups:
         - !Ref RDSSecurityGroup
       DBSubnetGroupName: !Ref DBSubnetGroup
       PubliclyAccessible: false
-      MultiAZ: false                    # Set to true if you need HA
-      BackupRetentionPeriod: 7          # Adjust as needed
-      DeletionProtection: false          # Prevent accidental deletes
+      MultiAZ: false
+      BackupRetentionPeriod: 7
+      DeletionProtection: false
       AutoMinorVersionUpgrade: true
       Tags:
         - Key: Name
           Value: MyPrivateMySQL
+
+  ### Security Group for EC2 (no inbound by default) ###
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Private EC2 SG (no inbound from public internet)
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress: []  # No inbound; SSM uses outbound via endpoints
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: PrivateEC2-SG
+
+  ### IAM Role & Instance Profile for SSM ###
+  SSMInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: SSMInstanceRole
+
+  SSMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref SSMInstanceRole
+
+  ### VPC Interface Endpoints (SSM over private network) ###
+  VPCEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG for VPC interface endpoints
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 10.0.0.0/16
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: VPCEndpoints-SG
+
+  SSMEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref MyVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: SSM-Endpoint
+
+  EC2MessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref MyVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: EC2Messages-Endpoint
+
+  SSMMessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref MyVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: SSMMessages-Endpoint
+
+  ### EC2 Instance (private, reachable via SSM) ###
+  PrivateEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0c02fb55956c7d316  # Replace with a valid AMI in your region if needed
+      InstanceType: t3.micro
+      SubnetId: !Ref PrivateSubnet1
+      IamInstanceProfile: !Ref SSMInstanceProfile
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      Tags:
+        - Key: Name
+          Value: PrivateEC2
+      DisableApiTermination: false
+      EnclaveOptions:
+        Enabled: false
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -euxo pipefail
+          echo "Instance started at $(date)" > /var/log/userdata.log
+          # NOTE: Package installs require internet/NAT or private mirrors; left minimal.
+          echo "Done" >> /var/log/userdata.log
 
 Outputs:
   VPCId:
@@ -159,3 +256,8 @@ Outputs:
   RDSEndpoint:
     Value: !GetAtt MyDBInstance.Endpoint.Address
   RDSPort:
+    Value: !GetAtt MyDBInstance.Endpoint.Port
+  EC2InstanceId:
+    Value: !Ref PrivateEC2Instance
+  EC2SSMNote:
+    Value: "Connect via AWS Systems Manager > Session Manager (no IGW/NAT required)."
