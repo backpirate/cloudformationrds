@@ -140,25 +140,32 @@ Resources:
       SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
       Tags: [{ Key: Name, Value: RDSSubnetGroupPrivate }]
 
+
+	  
+	  
   MyDBInstance:
-    Type: AWS::RDS::DBInstance
-    Properties:
-      DBName: mydb
-      MasterUsername: admin
-      MasterUserPassword: "MyHardcodedPassword134!"
-      DBInstanceClass: db.t3.micro
-      AllocatedStorage: 30
-      Engine: mysql
-      EngineVersion: '8.0'
-      StorageEncrypted: true
-      VPCSecurityGroups: [!Ref RDSSecurityGroup]
-      DBSubnetGroupName: !Ref DBSubnetGroup
-      PubliclyAccessible: false
-      MultiAZ: false
-      BackupRetentionPeriod: 7
-      DeletionProtection: false
-      AutoMinorVersionUpgrade: true
-      Tags: [{ Key: Name, Value: MyPrivateMySQL }]
+	  Type: AWS::RDS::DBInstance
+	  Properties:
+		DBName: MYDB                # Oracle DB name must be 1–8 characters, uppercase
+		MasterUsername: admin
+		MasterUserPassword: "MyHardcodedPassword134!"
+		DBInstanceClass: db.t3.micro
+		AllocatedStorage: 30
+		Engine: oracle-ee           # Oracle Enterprise Edition
+		EngineVersion: '19.0.0.0.ru-2025-07.rur-2025-07.r1'
+		LicenseModel: bring-your-own-license
+		StorageEncrypted: true
+		VPCSecurityGroups: [!Ref RDSSecurityGroup]
+		DBSubnetGroupName: !Ref DBSubnetGroup
+		PubliclyAccessible: false
+		MultiAZ: false
+		BackupRetentionPeriod: 7
+		DeletionProtection: false
+		AutoMinorVersionUpgrade: true
+		Tags:
+		  - Key: Name
+			Value: MyPrivateOracle
+
 
   ### EC2 with SSM (connects to RDS & EKS) ###
   SSMInstanceRole:
