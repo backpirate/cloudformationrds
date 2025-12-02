@@ -313,19 +313,7 @@ Resources:
             Tags:
               - { Key: Name, Value: AdvancedPrivateEKSNode }
 
-  EKSNodeGroup:
-    Type: AWS::EKS::Nodegroup
-    DependsOn: MyEKSCluster
-    Properties:
-      ClusterName: !Ref MyEKSCluster
-      NodeRole: !GetAtt EKSNodeRole.Arn
-      Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
-      ScalingConfig: { MinSize: 2, MaxSize: 2, DesiredSize: 2 }
-      AmiType: AL2_x86_64
-      LaunchTemplate:
-        Id: !Ref EKSNodeLaunchTemplate
-        Version: !GetAtt EKSNodeLaunchTemplate.LatestVersionNumber
-      Tags: { Name: AdvancedPrivateEKSNodes }
+
       
     # --- NEW: Internet Gateway & Attachment ---
   InternetGateway:
@@ -542,5 +530,3 @@ Outputs:
 
   EKSClusterName:
     Value: !Ref MyEKSCluster
-  EKSNodeGroupName:
-    Value: !Ref EKSNodeGroup
