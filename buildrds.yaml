@@ -145,7 +145,7 @@ Resources:
     Properties:
       DBName: mydb
       MasterUsername: admin
-      MasterUserPassword: "MyHardcodedPassword13!"
+      MasterUserPassword: "MyHardcodedPassword14!"
       DBInstanceClass: db.t3.micro
       AllocatedStorage: 30
       Engine: mysql
