@@ -244,6 +244,16 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
         - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
       Tags: [{ Key: Name, Value: EKSNodeRole }]
+      Policies:
+        - PolicyName: AllowKMSForEncryptedEBS
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey*
+                Resource: "*"
 
   MyEKSCluster:
     Type: AWS::EKS::Cluster
@@ -316,6 +326,78 @@ Resources:
         Id: !Ref EKSNodeLaunchTemplate
         Version: !GetAtt EKSNodeLaunchTemplate.LatestVersionNumber
       Tags: { Name: AdvancedPrivateEKSNodes }
+      
+    # --- NEW: Internet Gateway & Attachment ---
+  InternetGateway:
+      Type: AWS::EC2::InternetGateway
+      Properties:
+        Tags:
+          - { Key: Name, Value: MyVPC-IGW }
+
+  VPCGatewayAttachment:
+      Type: AWS::EC2::VPCGatewayAttachment
+      Properties:
+        VpcId: !Ref MyVPC
+        InternetGatewayId: !Ref InternetGateway
+
+    # --- NEW: Public Subnet (same AZ as PrivateSubnet1 for NAT placement) ---
+  PublicSubnet1:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref MyVPC
+        CidrBlock: 10.0.0.0/24
+        MapPublicIpOnLaunch: true
+        AvailabilityZone: !Select [0, !GetAZs '']
+        Tags:
+          - { Key: Name, Value: PublicSubnet-1 }
+          - { Key: kubernetes.io/role/elb, Value: 1 }  # optional: supports public ALB if ever needed
+
+    # --- NEW: Public Route Table and Route to the Internet via IGW ---
+  PublicRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId: !Ref MyVPC
+        Tags:
+          - { Key: Name, Value: PublicRouteTable }
+
+  PublicSubnet1RouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId: !Ref PublicSubnet1
+        RouteTableId: !Ref PublicRouteTable
+
+    # Default route in Public RT → IGW
+  PublicRouteToInternet:
+      Type: AWS::EC2::Route
+      DependsOn: VPCGatewayAttachment
+      Properties:
+        RouteTableId: !Ref PublicRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        GatewayId: !Ref InternetGateway
+
+    # --- NEW: NAT Gateway in Public Subnet (with EIP) ---
+  NatEIP:
+      Type: AWS::EC2::EIP
+      Properties:
+        Domain: vpc
+        Tags:
+          - { Key: Name, Value: NAT-EIP }
+
+  NatGateway:
+      Type: AWS::EC2::NatGateway
+      DependsOn: PublicSubnet1RouteTableAssociation
+      Properties:
+        AllocationId: !GetAtt NatEIP.AllocationId
+        SubnetId: !Ref PublicSubnet1
+        Tags:
+          - { Key: Name, Value: PublicSubnet1-NAT }
+          
+  DefaultRouteViaNat:
+      Type: AWS::EC2::Route
+      Properties:
+        RouteTableId: !Ref PrivateRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        NatGatewayId: !Ref NatGateway
 
   ### VPC Endpoints (Private) ###
   # SSM for EC2 management
