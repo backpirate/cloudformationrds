@@ -1,0 +1,30 @@
+
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo "Preparing environment..."
+      - yum install -y jq || true
+      # If CodeBuild gets a shallow clone, this prevents git diff issues
+      - git fetch --unshallow || true
+  pre_build:
+    commands:
+      - echo "Detecting changed connectors..."
+      - CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD || true)
+      - echo "$CHANGED_FILES"
+      - DEPLOY_LIST=""
+      - if echo "$CHANGED_FILES" | grep -q "^connectorA/"; then DEPLOY_LIST="$DEPLOY_LIST connectorA"; fi
+      - if echo "$CHANGED_FILES" | grep -q "^connectorB/"; then DEPLOY_LIST="$DEPLOY_LIST connectorB"; fi
+      - if echo "$CHANGED_FILES" | grep -q "^connectorC/"; then DEPLOY_LIST="$DEPLOY_LIST connectorC"; fi
+      - if [ -z "$DEPLOY_LIST" ]; then echo "No connector changes detected; exiting build."; exit 0; fi
+      - echo "Connectors to deploy: $DEPLOY_LIST"
+  build:
+    commands:
+      - echo "Starting deployment for: $DEPLOY_LIST"
+      - chmod +x scripts/deploy.sh
+      - ./scripts/deploy.sh "$DEPLOY_LIST"
+
+artifacts:
+  files:
+    - "**/*"
