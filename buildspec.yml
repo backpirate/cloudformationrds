@@ -6,24 +6,21 @@ phases:
     commands:
       - echo "Preparing environment..."
       - yum install -y jq || true
-      # If CodeBuild gets a shallow clone, this prevents git diff issues
-      - git fetch --unshallow || true
+
   pre_build:
     commands:
-      - echo "Detecting changed connectors..."
-      - CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD || true)
-      - echo "$CHANGED_FILES"
-      - DEPLOY_LIST=""
-      - if echo "$CHANGED_FILES" | grep -q "^connectorA/"; then DEPLOY_LIST="$DEPLOY_LIST connectorA"; fi
-      - if echo "$CHANGED_FILES" | grep -q "^connectorB/"; then DEPLOY_LIST="$DEPLOY_LIST connectorB"; fi
-      - if echo "$CHANGED_FILES" | grep -q "^connectorC/"; then DEPLOY_LIST="$DEPLOY_LIST connectorC"; fi
-      - if [ -z "$DEPLOY_LIST" ]; then echo "No connector changes detected; exiting build."; exit 0; fi
-      - echo "Connectors to deploy: $DEPLOY_LIST"
+      - echo "Validating repository structure..."
+      - ls -la
+      - test -f scripts/deploy.sh || (echo "scripts/deploy.sh missing"; exit 1)
+      - test -f connectorA/template.yaml || (echo "connectorA/template.yaml missing"; exit 1)
+      - test -f connectorB/template.yaml || (echo "connectorB/template.yaml missing"; exit 1)
+      - test -f connectorC/template.yaml || (echo "connectorC/template.yaml missing"; exit 1)
+
   build:
     commands:
-      - echo "Starting deployment for: $DEPLOY_LIST"
+      - echo "Starting deployment for all connectors"
       - chmod +x scripts/deploy.sh
-      - ./scripts/deploy.sh "$DEPLOY_LIST"
+      - ./scripts/deploy.sh "connectorA connectorB connectorC"
 
 artifacts:
   files:
