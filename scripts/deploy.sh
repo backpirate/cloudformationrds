@@ -1,35 +1,29 @@
 
-version: 0.2
+#!/bin/bash
+set -euo pipefail
 
-phases:
-  install:
-    commands:
-      - echo "Preparing environment..."
-      - |
-        if command -v yum >/dev/null 2>&1; then
-          sudo yum install -y jq || true
-        elif command -v apt-get >/dev/null 2>&1; then
-          sudo apt-get update -y || true
-          sudo apt-get install -y jq || true
-        else
-          echo "No supported package manager found; skipping jq install"
-        fi
+DEPLOY_LIST="${1:-}"
 
-  pre_build:
-    commands:
-      - echo "Validating repository structure..."
-      - ls -la
-      - test -f scripts/deploy.sh || (echo "scripts/deploy.sh missing"; exit 1)
-      - test -f connectorA/template.yaml || (echo "connectorA/template.yaml missing"; exit 1)
-      - test -f connectorB/template.yaml || (echo "connectorB/template.yaml missing"; exit 1)
-      - test -f connectorC/template.yaml || (echo "connectorC/template.yaml missing"; exit 1)
+if [ -z "$DEPLOY_LIST" ]; then
+  echo "No connectors to deploy."
+  exit 0
+fi
 
-  build:
-    commands:
-      - echo "Starting deployment for: connectorA connectorB connectorC"
-      - chmod +x scripts/deploy.sh
-      - ./scripts/deploy.sh "connectorA connectorB connectorC"
+for connector in $DEPLOY_LIST; do
+  TEMPLATE_PATH="$connector/template.yaml"
+  STACK_NAME="${connector}-stack"
 
-artifacts:
-  files:
-    - "**/*"
+  echo "Deploying stack: $STACK_NAME (template: $TEMPLATE_PATH)"
+
+  if [ ! -f "$TEMPLATE_PATH" ]; then
+    echo "ERROR: Template not found: $TEMPLATE_PATH"
+    exit 1
+  fi
+
+  aws cloudformation deploy \
+    --template-file "$TEMPLATE_PATH" \
+    --stack-name "$STACK_NAME" \
+    --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
+
+  echo "✅ Deployed $STACK_NAME"
+done
