@@ -19,9 +19,9 @@ phases:
       - echo "Validating repository structure..."
       - ls -la
       - test -f scripts/deploy.sh || (echo "scripts/deploy.sh missing"; exit 1)
-      - test -f connectorA/template.yaml || (echo "connectorA/template.yaml missing"; exit 1)
-      - test -f connectorB/template.yaml || (echo "connectorB/template.yaml missing"; exit 1)
-      - test -f connectorC/template.yaml || (echo "connectorC/template.yaml missing"; exit 1)
+      - test -f connectorA/template.yml || (echo "connectorA/template.yaml missing"; exit 1)
+      - test -f connectorB/template.yml || (echo "connectorB/template.yaml missing"; exit 1)
+      - test -f connectorC/template.yml || (echo "connectorC/template.yaml missing"; exit 1)
 
   build:
     commands:
