@@ -221,7 +221,7 @@ Resources:
             export DB_ENDPOINT='${MyDBInstance.Endpoint.Address}'
             export DB_PORT='${MyDBInstance.Endpoint.Port}'
             export DB_USER='${DBUsername}'
-            export DB_PASS='${DBPassword}'
+            
             export EKS_CLUSTER_NAME='MyAdvancedPrivateEKS'
             EOF
 
@@ -254,16 +254,16 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
         - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
       Tags: [{ Key: Name, Value: EKSNodeRole }]
-    Policies:
-      - PolicyName: AllowKMSForEncryptedEBS
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Action:
-                - kms:Decrypt
-                - kms:GenerateDataKey*
-              Resource: "*"
+      Policies:
+        - PolicyName: AllowKMSForEncryptedEBS
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey*
+                Resource: "*"
 
   MyEKSCluster:
     Type: AWS::EKS::Cluster
