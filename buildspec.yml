@@ -25,7 +25,6 @@ phases:
 
   build:
     commands:
-      - echo "Starting deployment for: connectorA connectorB connectorC"
       - chmod +x scripts/deploy.sh
       - ./scripts/deploy.sh "connectorA connectorB connectorC"
 
