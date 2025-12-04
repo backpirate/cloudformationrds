@@ -1,6 +1,7 @@
 
 #!/bin/bash
-set -euo pipefail
+set -eu
+
 
 DEPLOY_LIST="${1:-}"
 
