@@ -30,6 +30,7 @@ phases:
       - chmod +x scripts/deploy.sh
       - ./scripts/deploy.sh "connectorA connectorB connectorC"
 
+
 artifacts:
   files:
     - "**/*"
