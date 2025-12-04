@@ -1,4 +1,3 @@
-
 version: 0.2
 
 phases:
@@ -29,7 +28,6 @@ phases:
       - echo "Starting deployment for: connectorA connectorB connectorC"
       - chmod +x scripts/deploy.sh
       - ./scripts/deploy.sh "connectorA connectorB connectorC"
-
 
 artifacts:
   files:
