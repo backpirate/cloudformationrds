@@ -11,7 +11,7 @@ if [ -z "$DEPLOY_LIST" ]; then
 fi
 
 for connector in $DEPLOY_LIST; do
-  TEMPLATE_PATH="$connector/template.yaml"
+  TEMPLATE_PATH="$connector/template.yml"
   STACK_NAME="${connector}-stack"
 
   echo "Deploying stack: $STACK_NAME (template: $TEMPLATE_PATH)"
