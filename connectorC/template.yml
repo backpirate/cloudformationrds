@@ -92,7 +92,7 @@ Resources:
       DBInstanceClass: "db.t3.micro"
       Engine: "mysql"
       # If this version isn't supported in your region, remove or set to a supported one.
-      EngineVersion: "8.0.34"
+      EngineVersion: "8.0.44"
       MasterUsername: "admin"
       MasterUserPassword: "HardCodedPassword123!"   # INSECURE by design
       PubliclyAccessible: false                      # Enforces private-only
