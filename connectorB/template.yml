@@ -1,8 +1,6 @@
 
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Private-only MySQL RDS in a new VPC with private subnets. Identifiers derived from stack name (INSECURE: hardcoded password)."
-
-# Everything hardcoded except identifiers derived from AWS::StackName to allow multiple deployments.
+Description: "Fully-private MySQL RDS in a new VPC with private subnets and VPC endpoints. All values hardcoded; identifiers derived from AWS::StackName. (INSECURE: hardcoded password)."
 
 Resources:
   VPC:
@@ -15,7 +13,7 @@ Resources:
         - Key: Name
           Value: "hardcoded-private-mysql-vpc"
 
-  # Private route table (no default route to Internet)
+  # Private route table with NO 0.0.0.0/0 route (no IGW/NAT)
   PrivateRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -28,7 +26,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: "us-east-1a"         # Change if deploying in another region
+      AvailabilityZone: "us-east-1a"    # Hardcoded region/AZs
       CidrBlock: "10.20.1.0/24"
       MapPublicIpOnLaunch: false
       Tags:
@@ -39,7 +37,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: "us-east-1b"         # Change if deploying in another region
+      AvailabilityZone: "us-east-1b"
       CidrBlock: "10.20.2.0/24"
       MapPublicIpOnLaunch: false
       Tags:
@@ -58,16 +56,33 @@ Resources:
       SubnetId: !Ref PrivateSubnetB
       RouteTableId: !Ref PrivateRouteTable
 
+  # Security group for application clients that are allowed to connect to MySQL
+  AppClientSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "App clients allowed to connect to private MySQL"
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "10.20.0.0/16"  # Internal egress within VPC only
+      Tags:
+        - Key: Name
+          Value: "hardcoded-app-client-sg"
+
+  # MySQL SG only allows 3306 from the AppClientSecurityGroup
   MySQLSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: "Allow MySQL only from within the VPC CIDR"
+      GroupDescription: "Allow MySQL only from AppClientSecurityGroup"
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: "tcp"
           FromPort: 3306
           ToPort: 3306
-          CidrIp: "10.20.0.0/16"   # Restrict further to app/bastion CIDRs if known
+          SourceSecurityGroupId: !Ref AppClientSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "10.20.0.0/16"  # Internal egress within VPC only
       Tags:
         - Key: Name
           Value: "hardcoded-mysql-sg"
@@ -79,7 +94,6 @@ Resources:
       SubnetIds:
         - !Ref PrivateSubnetA
         - !Ref PrivateSubnetB
-      # Do NOT set DBSubnetGroupName to avoid global name collisions across stacks.
 
   MySQLDBInstance:
     Type: AWS::RDS::DBInstance
@@ -91,11 +105,10 @@ Resources:
       StorageType: "gp3"
       DBInstanceClass: "db.t3.micro"
       Engine: "mysql"
-      # If this version isn't supported in your region, remove or set to a supported one.
-      EngineVersion: "8.0.44"
-      MasterUsername: "admin"
-      MasterUserPassword: "HardCodedPassword123!"   # INSECURE by design
-      PubliclyAccessible: false                      # Enforces private-only
+      EngineVersion: "8.0.44"               # Hardcoded version
+      MasterUsername: "admin"               # Hardcoded username
+      MasterUserPassword: "HardCodedPassword123!"  # INSECURE: Hardcoded
+      PubliclyAccessible: false             # Private-only endpoint
       BackupRetentionPeriod: 7
       MultiAZ: false
       VPCSecurityGroups:
@@ -105,10 +118,68 @@ Resources:
       PreferredMaintenanceWindow: "sun:04:00-sun:04:30"
       AutoMinorVersionUpgrade: true
       DeleteAutomatedBackups: true
+      StorageEncrypted: true                # Uses AWS-managed key for RDS
+
+  # --- VPC Endpoints to keep client traffic private (no IGW/NAT required) ---
+
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: "com.amazonaws.us-east-1.s3"
+      VpcEndpointType: "Gateway"
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal: "*"
+            Action: "s3:*"
+            Resource: "*"
+
+  SecretsManagerEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: "com.amazonaws.us-east-1.secretsmanager"
+      VpcEndpointType: "Interface"
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+      SecurityGroupIds:
+        - !Ref AppClientSecurityGroup
+      PrivateDnsEnabled: true
+
+  CloudWatchLogsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: "com.amazonaws.us-east-1.logs"
+      VpcEndpointType: "Interface"
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+      SecurityGroupIds:
+        - !Ref AppClientSecurityGroup
+      PrivateDnsEnabled: true
+
+  KMSEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: "com.amazonaws.us-east-1.kms"
+      VpcEndpointType: "Interface"
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+      SecurityGroupIds:
+        - !Ref AppClientSecurityGroup
+      PrivateDnsEnabled: true
 
 Outputs:
   DBEndpointAddress:
-    Description: "RDS MySQL endpoint address (resolves to private IPs)"
+    Description: "RDS MySQL endpoint address (private DNS)"
     Value: !GetAtt MySQLDBInstance.Endpoint.Address
   DBPort:
     Description: "RDS MySQL endpoint port"
@@ -116,9 +187,12 @@ Outputs:
   DBIdentifier:
     Description: "RDS MySQL instance identifier"
     Value: !Ref MySQLDBInstance
-  SecurityGroupId:
-    Description: "Security Group ID allowing MySQL from VPC CIDR"
+  MySQLSecurityGroupId:
+    Description: "MySQL Security Group ID"
     Value: !GetAtt MySQLSecurityGroup.GroupId
+  AppClientSecurityGroupId:
+    Description: "App Client Security Group ID"
+    Value: !GetAtt AppClientSecurityGroup.GroupId
   SubnetGroupName:
     Description: "DB Subnet Group Name"
     Value: !Ref DBSubnetGroup
