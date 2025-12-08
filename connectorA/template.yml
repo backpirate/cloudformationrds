@@ -101,7 +101,7 @@ Resources:
     UpdateReplacePolicy: Snapshot
     Properties:
       DBInstanceIdentifier: !Sub "hardcoded-private-mysql-${AWS::StackName}"
-      AllocatedStorage: "30"
+      AllocatedStorage: "40"
       StorageType: "gp3"
       DBInstanceClass: "db.t3.micro"
       Engine: "mysql"
