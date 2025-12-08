@@ -107,7 +107,7 @@ Resources:
       Engine: "mysql"
       EngineVersion: "8.0.44"               # Hardcoded version
       MasterUsername: "admin"               # Hardcoded username
-      MasterUserPassword: "HardCodedPassword123!"  # INSECURE: Hardcoded
+      MasterUserPassword: "HardCodedPassword1234"  # INSECURE: Hardcoded
       PubliclyAccessible: false             # Private-only endpoint
       BackupRetentionPeriod: 7
       MultiAZ: false
