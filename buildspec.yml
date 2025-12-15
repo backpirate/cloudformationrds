@@ -16,6 +16,13 @@ phases:
         elif command -v apt-get >/dev/null 2>&1; then
           sudo apt-get update -y || true
           sudo apt-get install -y jq || true
+          sudo apt install curl build-essential -y
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
+          source ~/.bashrc
+          source ~/.bash_profile
+          nvm install node
+          
+
         else
           echo "No supported package manager found; skipping jq install"
         fi
@@ -38,3 +45,4 @@ artifacts:
   files:
 
     - "**/*"
+
