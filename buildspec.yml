@@ -7,6 +7,12 @@ phases:
       - |
         if command -v yum >/dev/null 2>&1; then
           sudo yum install -y jq || true
+          sudo yum install curl -y
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
+          source ~/.bashrc
+          source ~/.bash_profile
+          nvm install node
+          
         elif command -v apt-get >/dev/null 2>&1; then
           sudo apt-get update -y || true
           sudo apt-get install -y jq || true
@@ -30,4 +36,5 @@ phases:
 
 artifacts:
   files:
+
     - "**/*"
