@@ -28,6 +28,9 @@ phases:
 
           # NVM should now be functional in this same script execution
           nvm install node
+          node -v
+          npm -v
+
           
 
         else
@@ -52,5 +55,6 @@ artifacts:
   files:
 
     - "**/*"
+
 
 
