@@ -1,81 +1,36 @@
-
 version: 0.2
 
 phases:
   install:
     commands:
-      - set -euxo pipefail
       - echo "Preparing environment..."
       - |
         if command -v yum >/dev/null 2>&1; then
-          # --- Yum-based distros (Amazon Linux, RHEL/CentOS) ---
-          sudo yum install -y jq curl gcc-c++ make
-
-          # Install NVM
-          export NVM_DIR="$HOME/.nvm"
-          if [ ! -d "$NVM_DIR" ]; then
-            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
-          fi
-
-          # Load NVM in THIS shell (do not rely on bashrc)
-          . "$NVM_DIR/nvm.sh"
-          [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
-
-          # Use Node LTS (Node 22 as of now)
-          nvm install --lts
-          nvm use --lts
-          nvm alias default 'lts/*'
-
-          # Keep npm global installs under home
-          npm config set prefix "$HOME/.npm-global"
-          export PATH="$HOME/.npm-global/bin:$PATH"
-
-          # Sanity check
-          echo "node: $(which node) -> $(node -v)"
-          echo "npm:  $(which npm)  -> $(npm -v)"
-
-          # Install Bruno CLI
-          npm install -g @usebruno/cli
-
-          # Verify
-          bru --version || bruno --version
-
+          sudo yum install -y jq || true
+          sudo yum install curl -y
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
+          source ~/.bashrc
+          source ~/.bash_profile
+          nvm install node
+          
         elif command -v apt-get >/dev/null 2>&1; then
-          # --- Ubuntu/Debian ---
-          sudo apt-get update -y
-          sudo apt-get install -y curl jq build-essential
-
-          # Install NVM
+          sudo apt-get update -y || true
+          sudo apt-get install -y jq || true
+          sudo apt install curl build-essential -y
+          
+          # Explicitly set NVM_DIR and run installation script
           export NVM_DIR="$HOME/.nvm"
-          if [ ! -d "$NVM_DIR" ]; then
-            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
-          fi
-
-          # Load NVM in THIS shell
-          . "$NVM_DIR/nvm.sh"
-          [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
-
-          # Use Node LTS (Node 22 as of now)
-          nvm install --lts
-          nvm use --lts
-          nvm alias default 'lts/*'
-
-          # Optional: clean npm cache
-          npm cache clean --force
-
-          # Keep npm global installs under home
-          npm config set prefix "$HOME/.npm-global"
-          export PATH="$HOME/.npm-global/bin:$PATH"
-
-          # Sanity check
-          echo "node: $(which node) -> $(node -v)"
-          echo "npm:  $(which npm)  -> $(npm -v)"
-
-          # Install Bruno CLI
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
+          
+          # Load NVM into the current running script/shell using POSIX '.'
+          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # Load nvm functions
+          [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # Load bash_completion
+          node -v
+          npm -v
           npm install -g @usebruno/cli
+          bru --version
 
-          # Verify
-          bru --version || bruno --version
+          
 
         else
           echo "No supported package manager found; skipping jq install"
@@ -83,15 +38,7 @@ phases:
 
   pre_build:
     commands:
-      - set -euxo pipefail
       - echo "Validating repository structure..."
-      # Re-load NVM in this phase; each CodeBuild phase is a fresh shell
-      - export NVM_DIR="$HOME/.nvm"
-      - . "$NVM_DIR/nvm.sh"
-      - nvm use --lts
-      - echo "Using Node $(node -v) / npm $(npm -v)"
-      # Bruno is already installed in install phase; skip reinstall
-      - bru --version || bruno --version
       - ls -la
       - test -f scripts/deploy.sh || (echo "scripts/deploy.sh missing"; exit 1)
       - test -f connectorA/template.yml || (echo "connectorA/template.yml missing"; exit 1)
@@ -100,15 +47,10 @@ phases:
 
   build:
     commands:
-      - set -euxo pipefail
-      # Re-load NVM in this phase too
-      - export NVM_DIR="$HOME/.nvm"
-      - . "$NVM_DIR/nvm.sh"
-      - nvm use --lts
-      - echo "Running deploy with Node $(node -v)"
       - chmod +x scripts/deploy.sh
       - ./scripts/deploy.sh "connectorA connectorB connectorC"
 
 artifacts:
   files:
+
     - "**/*"
