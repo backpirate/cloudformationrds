@@ -11,6 +11,11 @@ phases:
           curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
           source ~/.bashrc
           source ~/.bash_profile
+          
+          nvm install --lts
+          nvm use --lts
+          nvm alias default 'lts/*'
+
           nvm install node
           
         elif command -v apt-get >/dev/null 2>&1; then
@@ -58,6 +63,7 @@ artifacts:
   files:
 
     - "**/*"
+
 
 
 
