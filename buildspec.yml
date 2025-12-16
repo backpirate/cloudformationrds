@@ -28,6 +28,7 @@ phases:
           node -v
           npm -v
           npm install -g @usebruno/cli
+          bru --version
 
           
 
@@ -53,6 +54,7 @@ artifacts:
   files:
 
     - "**/*"
+
 
 
 
