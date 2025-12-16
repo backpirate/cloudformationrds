@@ -12,11 +12,27 @@ phases:
           source ~/.bashrc
           source ~/.bash_profile
           
+          # Use modern Node that satisfies undici@7 (prefer 22 LTS)
           nvm install --lts
           nvm use --lts
           nvm alias default 'lts/*'
+          
+          # (Optional) keep global npm installs under your home (no sudo required)
+          npm config set prefix "$HOME/.npm-global"
+          export PATH="$HOME/.npm-global/bin:$PATH"
+          echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc
+          
+          # Sanity check: ensure node/npm are from NVM (not /usr/bin or /usr/local/bin)
+          echo "node: $(which node) -> $(node -v)"
+          echo "npm:  $(which npm)  -> $(npm -v)"
+          
+          # Install Bruno CLI
+          npm install -g @usebruno/cli
+          
+          # Verify
+          bru --version || bruno --version
 
-          nvm install node
+         
           
         elif command -v apt-get >/dev/null 2>&1; then
           sudo apt-get update -y || true
@@ -63,6 +79,7 @@ artifacts:
   files:
 
     - "**/*"
+
 
 
 
