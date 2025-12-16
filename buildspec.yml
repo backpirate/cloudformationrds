@@ -50,6 +50,20 @@ phases:
           npm -v
           
           npm cache clean --force
+
+          pm config set prefix "$HOME/.npm-global"
+          export PATH="$HOME/.npm-global/bin:$PATH"
+          echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc
+          
+          # Sanity check: ensure node/npm are from NVM (not /usr/bin or /usr/local/bin)
+          echo "node: $(which node) -> $(node -v)"
+          echo "npm:  $(which npm)  -> $(npm -v)"
+          
+          # Install Bruno CLI
+          npm install -g @usebruno/cli
+          
+          # Verify
+          bru --version || bruno --version
          
 
 
@@ -79,6 +93,7 @@ artifacts:
   files:
 
     - "**/*"
+
 
 
 
