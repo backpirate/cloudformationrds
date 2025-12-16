@@ -30,6 +30,7 @@ phases:
           
           npm cache clean --force
           npm install -g @usebruno/cli
+          bru --version
 
 
           
@@ -56,6 +57,7 @@ artifacts:
   files:
 
     - "**/*"
+
 
 
 
