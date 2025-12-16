@@ -27,10 +27,18 @@ phases:
           [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # Load bash_completion
 
           # NVM should now be functional in this same script execution
-          nvm install node
+          
+          which node
+          which npm
           node -v
           npm -v
+          
+          # Install Bruno CLI
           npm install -g @usebruno/cli
+          
+          # Verify install
+          bruno --version
+
 
           
 
@@ -56,6 +64,7 @@ artifacts:
   files:
 
     - "**/*"
+
 
 
 
