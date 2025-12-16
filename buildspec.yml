@@ -29,8 +29,7 @@ phases:
           npm -v
           
           npm cache clean --force
-          npm install -g @usebruno/cli
-          bru --version
+         
 
 
           
@@ -42,6 +41,8 @@ phases:
   pre_build:
     commands:
       - echo "Validating repository structure..."
+      - npm install -g @usebruno/cli
+      - bru --version
       - ls -la
       - test -f scripts/deploy.sh || (echo "scripts/deploy.sh missing"; exit 1)
       - test -f connectorA/template.yml || (echo "connectorA/template.yml missing"; exit 1)
@@ -57,6 +58,7 @@ artifacts:
   files:
 
     - "**/*"
+
 
 
 
